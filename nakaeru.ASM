@@ -81,6 +81,8 @@ start:
   sub ecx, 5
   mov dword [eax+1], ecx
 
+  ;call window_mode_patch
+
   or al, 1
   retn
 
@@ -253,10 +255,102 @@ patch_5:
 
 
 ; Window mode patch
+;0043F654                        . EB 28          JMP SHORT RISING.0043F67E <--- Remove fullscreen mode
+
+;0043F643                        . 6A 08          PUSH 8 <--- Change to 8 (normal)
+
+;0043F72A                        . 5D             POP EBP
+;0043F72B                        . 5F             POP EDI
+;0043F72C                        . 5E             POP ESI
+;0043F72D                        . 59             POP ECX
+;0043F72E                        . 5B             POP EBX
 
 
 
-; Windowed
+set_fullscreen_patch dd 0043F654h
+
+whook dd 0043F72Ah
+wreturn dd 0043F72Fh
+iddraw dd 4E1788h
+wmode dd 0043F644h
+ipsurface dd 4E178Ch
+
+;fakeCall dd 0048BF60h
+
+clipper rb 2024
+
+window_mode_patch:
+  invoke VirtualProtect, [set_fullscreen_patch], 2, PAGE_EXECUTE_READWRITE, placeHolder
+  mov eax, [set_fullscreen_patch]
+  mov word [eax], 028EBh
+
+  invoke VirtualProtect, [wmode], 1, PAGE_EXECUTE_READWRITE, placeHolder
+  mov eax, [wmode]
+  mov byte [eax], 8
+
+  invoke VirtualProtect, [whook], 5, PAGE_EXECUTE_READWRITE, placeHolder
+  mov eax, [whook]
+  mov byte [eax], 0xE9
+  mov ecx, wpatch
+  sub ecx, eax
+  sub ecx, 5
+  mov dword [eax+1], ecx
+
+  retn
+
+
+  ; Initialize clipping info
+  wpatch:
+  pushad
+
+  db $cc
+
+  push 0
+  push clipper
+  push 0
+  mov eax, [iddraw]
+  mov eax, [eax]
+  push eax
+  mov edx, [eax]
+  call dword [edx + 10h] ; CreateClipper
+
+  invoke FindWindowA, 0, 'Rising Lands'
+  push eax
+  push 0
+
+  mov eax, clipper
+  mov eax, [eax]
+  push eax
+  mov edx, [eax]
+  call dword [edx+20h] ; SetHWND
+
+  mov eax, dword [clipper]
+  push eax
+  mov eax, [ipsurface]
+  mov eax, [eax]
+  push eax
+  mov edx, [eax]
+  call dword [edx + 70h]
+  ;[+70h] < setclipper
+
+
+  ; Return to normal routine
+  popad
+  POP EBP
+  POP EDI
+  POP ESI
+  POP ECX
+  POP EBX
+  ;call [fakeCall]
+  jmp [wreturn]
+
+
+
+
+
+
+
+
 
 .end start
 
