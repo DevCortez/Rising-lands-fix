@@ -10,38 +10,43 @@ section 'code' code readable executable writeable
 ; Nopes
 
 ;1
-;00474B70  |. 74 3F	     JE SHORT RISING_V.00474BB1 <--- Removes cd verification
+;00474B70  |. 74 3F          JE SHORT RISING_V.00474BB1 <--- Removes cd verification
 
 ; Patches
 
 ;1
-;0043F2E8		    |. FF52 1C	      |CALL DWORD PTR DS:[EDX+1C]				      ;  Copy data from backBuffer to primary surface
-;0043F2EB		    |. 89C2	      |MOV EDX,EAX
-;0043F2ED		    |. 85C0	      |TEST EAX,EAX
-
-
-
+;0043F2E8                   |. FF52 1C        |CALL DWORD PTR DS:[EDX+1C]                                     ;  Copy data from backBuffer to primary surface
+;0043F2EB                   |. 89C2           |MOV EDX,EAX
+;0043F2ED                   |. 85C0           |TEST EAX,EAX
 
 ;2 Adjusted file loading to load properly
-;0048CB32 <LoadFileProc>   /$ 53	     PUSH EBX <--- hax [ESP] for file path
-;0048CB33		   |. 51	     PUSH ECX
-;0048CB34		   |. 52	     PUSH EDX
-;0048CB35		   |. 56	     PUSH ESI
-;0048CB36		   |. 57	     PUSH EDI
-;0048CB37		   |. 55	     PUSH EBP <--- returns here
-;0048CB38		   |. 83EC 0C	     SUB ESP,0C
+;0048CB32 <LoadFileProc>   /$ 53             PUSH EBX <--- hax [ESP] for file path
+;0048CB33                  |. 51             PUSH ECX
+;0048CB34                  |. 52             PUSH EDX
+;0048CB35                  |. 56             PUSH ESI
+;0048CB36                  |. 57             PUSH EDI
+;0048CB37                  |. 55             PUSH EBP <--- returns here
+;0048CB38                  |. 83EC 0C        SUB ESP,0C
 
-;3 Draw speed
-;00474F88		  |. E8 7379FBFF    CALL <RISING.GameLoop>  <--- Hook here
-;00474F8D		  |. E8 0E28FAFF    CALL <RISING.RequestPaint> <--- Return here
-
-;4 Experimental game logic lock
-;0042C944		   . 0F87 3F0C0000	    JA RISING.0042D589 <-- Return to this to abort
-;0042C94A		   . 25 FF000000	    AND EAX,0FF
-;0042C94F		   . 2E:FF2485 9CC84200     JMP DWORD PTR CS:[EAX*4+42C89C] <--- Hook this
+;5 Speed fix
+;0046009B                        . E8 984E0100    CALL <RISING.DrawScreen> <--- Hook here
+;004600A0                        . EB 07          JMP SHORT RISING.004600A9 <--- Return here
 
 
+p1a dd 0043F2E8h
+p1r dd 0043F2EDh
 
+p2a dd 48CB32h
+p2r dd 48CB37h
+
+p3a dd 00474F88h
+p3r dd 00474F8Dh
+
+p4a dd 0042C94Fh
+p4r dd 0042D589h
+
+p5a dd 46009Bh
+p5r dd 4600A0h
 
 
 start:
@@ -68,18 +73,10 @@ start:
   sub ecx, 5
   mov dword [eax+1], ecx
 
-  invoke VirtualProtect, [p3a], 5, PAGE_EXECUTE_READWRITE, placeHolder
-  mov eax, [p3a]
+  invoke VirtualProtect, [p5a], 5, PAGE_EXECUTE_READWRITE, placeHolder
+  mov eax, [p5a]
   mov byte [eax], 0xE9
-  mov ecx, patch_3
-  sub ecx, eax
-  sub ecx, 5
-  mov dword [eax+1], ecx
-
-  invoke VirtualProtect, [p4a], 5, PAGE_EXECUTE_READWRITE, placeHolder
-  mov eax, [p4a]
-  mov byte [eax], 0xE9
-  mov ecx, patch_4
+  mov ecx, patch_5
   sub ecx, eax
   sub ecx, 5
   mov dword [eax+1], ecx
@@ -88,18 +85,6 @@ start:
   retn
 
 placeHolder dd 0
-
-p1a dd 0043F2E8h
-p1r dd 0043F2EDh
-
-p2a dd 48CB32h
-p2r dd 48CB37h
-
-p3a dd 00474F88h
-p3r dd 00474F8Dh
-
-p4a dd 0042C94Fh
-p4r dd 0042D589h
 
 patch_1:
   ; Blt interface
@@ -235,76 +220,41 @@ patch_2:
   p2buffer rb 3048
 
 
-patch_3:
-CALL [drawProc]
-  jmp [p3r]
-  invoke GetTickCount
-  sub eax, 30
-  cmp eax, [drawFrameLock]
-  jb @f
-    CALL [drawProc]
+patch_5:
+  pushad
+    @@:
     invoke GetTickCount
-    mov [drawFrameLock], eax
-  @@:
+    sub eax, [timeStamp]
+    cmp eax, 1000 / 90
+    jb @b
+    invoke GetTickCount
+    mov [timeStamp], eax
+  popad
+  CALL [drawCall]
+  jmp [p5r]
 
-  jmp [p3r]
-  drawFrameLock dd -1
-  drawProc dd 0042C900h
-
-patch_4:
-  mov [paramlock], eax
-  ;cmp eax, 1
-  ;je @f
-  ;cmp eax, 6
-  ;je @f
-  ;cmp eax, 7
-  ;je @f
-  ;cmp eax, 8
-  ;je @f
-  ;cmp eax, 9
-  ;je @f
-  ;cmp eax, 0Ah
-  ;je @f
-  ;cmp eax, 0Bh
-  ;je @f
-  ;cmp eax, 0Fh
-  ;je @f
-  ;cmp eax, 11h  ; <--- Game wont start w/o
-  ;je lock_frame
-  ;cmp eax, 12h   ; <- Characters wont move
-  ;je lock_frame
-  cmp eax, 13h
-  je @f
-  cmp eax, 14h
-  je @f
-  cmp eax, 15h
-  je @f
-  cmp eax, 16h
-  je @f
-  cmp eax, 17h
-  je @f
-  cmp eax, 18h
-  je @f
-  proper_jmp:
-  mov eax, [paramlock]
-  JMP DWORD [EAX*4+42C89Ch]
-  @@:
-  jmp [p4r]
-
-  lock_frame:
-  invoke GetTickCount
-  sub eax, 1000 / 10
-  cmp eax, [frameStamp]
-  jb @b
-  invoke GetTickCount
-  mov [frameStamp], eax
-  jmp proper_jmp
-
-  frameStamp dd 0
-  paramlock dd 0
-
+  timeStamp dd 0
+  drawCall dd 00474F38h
 
 ; Special patches
+
+; Resolution patch
+;0043F5BB                        . 74 25          JE SHORT RISING.0043F5E2
+;0043F5BD                        . BF 20030000    MOV EDI,320
+;0043F5C2                        . B8 58020000    MOV EAX,258
+;0043F5C7                        . BA 11000000    MOV EDX,11
+;0043F5CC                        . 66:893D 18A049>MOV WORD PTR DS:[49A018],DI
+;0043F5D3                        . 66:A3 1AA04900 MOV WORD PTR DS:[49A01A],AX
+;0043F5D9                        . 66:8915 168750>MOV WORD PTR DS:[508716],DX
+;0043F5E0                        . EB 24          JMP SHORT RISING.0043F606
+
+
+
+
+
+; Window mode patch
+
+
 
 ; Windowed
 
